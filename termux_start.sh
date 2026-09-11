@@ -4,8 +4,14 @@
 # Gemini Web2API - 1-Click Termux Launch Script for JanitorAI Roleplay
 # ==============================================================================
 
-# Ensure we operate in the script's directory regardless of where it's launched
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ensure we operate in the script's directory even when called via a symlink
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 cd "$SCRIPT_DIR"
 
 # 1. Acquire Android Wake Lock (prevents Android OS from sleeping/killing the server)

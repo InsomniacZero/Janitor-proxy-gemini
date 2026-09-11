@@ -24,7 +24,10 @@ pip install httpx 2>/dev/null || pip install --break-system-packages httpx
 chmod +x "$SCRIPT_DIR/termux_start.sh"
 echo -e "\033[1;33m[3/3] Creating shortcut command 'insom'...\033[0m"
 if [ -d "$PREFIX/bin" ]; then
-    ln -sf "$SCRIPT_DIR/termux_start.sh" "$PREFIX/bin/insom"
+    cat << EOF > "$PREFIX/bin/insom"
+#!/usr/bin/env bash
+cd "$SCRIPT_DIR" && exec ./termux_start.sh "\$@"
+EOF
     chmod +x "$PREFIX/bin/insom"
 fi
 
