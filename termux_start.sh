@@ -14,8 +14,13 @@ if command -v termux-wake-lock >/dev/null 2>&1; then
 fi
 
 PORT=8081
-LOG_FILE="/tmp/gemini_server.log"
-TUNNEL_LOG="/tmp/gemini_tunnel.log"
+LOG_DIR="${TMPDIR:-$PREFIX/tmp}"
+if [ ! -d "$LOG_DIR" ] || [ ! -w "$LOG_DIR" ]; then
+    LOG_DIR="$HOME/.gemini_logs"
+    mkdir -p "$LOG_DIR"
+fi
+LOG_FILE="$LOG_DIR/gemini_server.log"
+TUNNEL_LOG="$LOG_DIR/gemini_tunnel.log"
 
 # Cleanup on exit (Ctrl+C)
 cleanup() {
