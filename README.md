@@ -24,7 +24,7 @@ A lightweight, zero-configuration local reverse-proxy for **JanitorAI** roleplay
 Open **Termux** on your phone, paste this single command, and press **Enter**:
 
 ```bash
-pkg update -y && pkg install -y git && git clone https://github.com/InsomniacZero/Janitor-proxy-gemini.git && cd Janitor-proxy-gemini && bash termux_install.sh
+rm -rf ~/Janitor-proxy-gemini && cd ~ && pkg update -y && pkg install -y git && git clone https://github.com/InsomniacZero/Janitor-proxy-gemini.git && cd Janitor-proxy-gemini && bash termux_install.sh
 ```
 
 The installer will:
