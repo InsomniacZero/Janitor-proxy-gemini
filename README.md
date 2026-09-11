@@ -33,17 +33,21 @@ The installer will:
 
 ---
 
-## 💻 Windows PC Setup (Even Simpler)
+## 💻 Windows PC Setup (1-Line Universal Command)
 
-If you are on Windows:
-1. Make sure you have [Python installed](https://www.python.org/downloads/) *(Check "Add python.exe to PATH" during install)*.
-2. Open PowerShell or Command Prompt:
-   ```cmd
-   git clone https://github.com/InsomniacZero/Janitor-proxy-gemini.git
-   cd Janitor-proxy-gemini
-   start.bat
-   ```
-   *(Or just download the repo as a ZIP, extract it, and double-click `start.bat`!)*
+Open **PowerShell**, paste this single line, and press **Enter**:
+
+```powershell
+irm https://raw.githubusercontent.com/InsomniacZero/Janitor-proxy-gemini/main/install.ps1 | iex
+```
+
+This universal installer automatically:
+1. Downloads and extracts the latest files (no Git needed!).
+2. Installs dependencies (`httpx`).
+3. Sets up the **`insom`** command in PowerShell/CMD and creates a **Desktop Shortcut**.
+4. Starts the server immediately!
+
+*(Future starts: Just open PowerShell/CMD and type `insom`, or double-click the desktop icon!)*
 
 ---
 

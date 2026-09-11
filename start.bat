@@ -1,5 +1,6 @@
 @echo off
 title Janitor-proxy-gemini (PC Local Server)
+cd /d "%~dp0"
 cls
 
 echo ===================================================================
@@ -33,6 +34,7 @@ echo     - Model:      gemini-3.8-flash (or gemini-3.8-flash-thinking)
 echo ===================================================================
 echo  Running 100%% locally on your PC (Zero lag / No Cloudflare needed)
 echo  Press Ctrl+C in this window to stop the server.
+echo  Start anytime with command: insom
 echo ===================================================================
 echo.
 echo [Live Logs - Chat requests will appear below]:
