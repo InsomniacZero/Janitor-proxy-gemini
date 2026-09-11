@@ -80,23 +80,55 @@ if ! command -v cloudflared >/dev/null 2>&1; then
     exit 1
 fi
 
-# 4. Start cloudflared quick tunnel
+# 4. Start HTTPS Tunnel
 rm -f "$TUNNEL_LOG"
-cloudflared tunnel --url http://127.0.0.1:${PORT} > "$TUNNEL_LOG" 2>&1 &
+TUNNEL_URL=""
+
+echo -e "\033[1;36m[+] Connecting to Cloudflare Tunnel (HTTP/2 TCP)...\033[0m"
+cloudflared tunnel --url http://127.0.0.1:${PORT} --protocol http2 --edge-ip-version 4 > "$TUNNEL_LOG" 2>&1 &
 TUNNEL_PID=$!
 
-echo -e "\033[1;33m[~] Generating your JanitorAI proxy link (takes ~5-10s)...\033[0m"
-
-TUNNEL_URL=""
-for i in {1..30}; do
+echo -ne "\033[1;33m[~] Generating proxy link\033[0m"
+for i in {1..12}; do
+    echo -ne "\033[1;33m.\033[0m"
     if [ -f "$TUNNEL_LOG" ]; then
         TUNNEL_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare\.com' "$TUNNEL_LOG" | head -n 1)
         if [ -n "$TUNNEL_URL" ]; then
+            echo -e " \033[1;32m[Connected!]\033[0m"
             break
         fi
     fi
     sleep 1
 done
+echo ""
+
+# 5. Fallback: If Cloudflare is blocked or slow on mobile, use Pinggy (Port 443 HTTPS)
+if [ -z "$TUNNEL_URL" ]; then
+    echo -e "\033[1;33m[!] Cloudflare was blocked by your mobile carrier. Switching to fallback tunnel (Pinggy)...\033[0m"
+    if [ -n "$TUNNEL_PID" ]; then
+        kill "$TUNNEL_PID" 2>/dev/null
+    fi
+    if ! command -v ssh >/dev/null 2>&1; then
+        pkg install -y openssh
+    fi
+    rm -f "$TUNNEL_LOG"
+    ssh -p 443 -R 0:localhost:${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null a.pinggy.io > "$TUNNEL_LOG" 2>&1 &
+    TUNNEL_PID=$!
+    
+    echo -ne "\033[1;33m[~] Generating fallback link\033[0m"
+    for i in {1..12}; do
+        echo -ne "\033[1;33m.\033[0m"
+        if [ -f "$TUNNEL_LOG" ]; then
+            TUNNEL_URL=$(grep -o -E 'https://[-0-9a-z.]+\.(pinggy-free\.link|pinggy\.link|free\.pinggy\.net)' "$TUNNEL_LOG" | head -n 1)
+            if [ -n "$TUNNEL_URL" ]; then
+                echo -e " \033[1;32m[Connected!]\033[0m"
+                break
+            fi
+        fi
+        sleep 1
+    done
+    echo ""
+fi
 
 if [ -z "$TUNNEL_URL" ]; then
     echo -e "\033[1;31m[ERROR] Tunnel timed out. Check log below:\033[0m"

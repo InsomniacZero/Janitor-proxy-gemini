@@ -12,9 +12,9 @@ cd "$SCRIPT_DIR"
 echo -e "\033[1;36m[+] Setting up Gemini Web2API on Android Termux...\033[0m"
 
 # 1. Update Termux packages & install dependencies
-echo -e "\033[1;33m[1/4] Installing system packages (python, cloudflared, termux-api)...\033[0m"
+echo -e "\033[1;33m[1/4] Installing system packages (python, cloudflared, termux-api, openssh)...\033[0m"
 pkg update -y || apt-get update -y
-pkg install -y python cloudflared termux-api || apt-get install -y python cloudflared termux-api
+pkg install -y python cloudflared termux-api openssh || apt-get install -y python cloudflared termux-api openssh
 
 # 2. Install Python dependencies
 echo -e "\033[1;33m[2/4] Installing Python httpx library...\033[0m"
