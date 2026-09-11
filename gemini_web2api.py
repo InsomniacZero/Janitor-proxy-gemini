@@ -1117,10 +1117,6 @@ def main():
     if args.proxy:
         CONFIG["proxy"] = args.proxy
 
-    new_bl = fetch_latest_bl()
-    if new_bl:
-        CONFIG["gemini_bl"] = new_bl
-
     class ThreadedServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True
         allow_reuse_address = True
