@@ -28,9 +28,22 @@ rm -rf ~/Janitor-proxy-gemini && cd ~ && pkg update -y && pkg install -y git && 
 ```
 
 The installer will:
-1. Install Python, Cloudflare Tunnel, and Termux tools.
-2. Install dependencies (`httpx`).
-3. Set up the shortcut keyword **`insom`**.
+1. Install Python and dependencies (`httpx`).
+2. Set up the shortcut keyword **`insom`**.
+
+---
+
+## 💻 Windows PC Setup (Even Simpler)
+
+If you are on Windows:
+1. Make sure you have [Python installed](https://www.python.org/downloads/) *(Check "Add python.exe to PATH" during install)*.
+2. Open PowerShell or Command Prompt:
+   ```cmd
+   git clone https://github.com/InsomniacZero/Janitor-proxy-gemini.git
+   cd Janitor-proxy-gemini
+   start.bat
+   ```
+   *(Or just download the repo as a ZIP, extract it, and double-click `start.bat`!)*
 
 ---
 
