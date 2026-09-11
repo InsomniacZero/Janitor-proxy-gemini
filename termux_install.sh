@@ -12,20 +12,17 @@ cd "$SCRIPT_DIR"
 echo -e "\033[1;36m[+] Setting up Gemini Web2API on Android Termux...\033[0m"
 
 # 1. Update Termux packages & install dependencies
-echo -e "\033[1;33m[1/4] Installing system packages (python, cloudflared, termux-api, openssh)...\033[0m"
+echo -e "\033[1;33m[1/3] Installing system packages (python, termux-api)...\033[0m"
 pkg update -y || apt-get update -y
-pkg install -y python cloudflared termux-api openssh || apt-get install -y python cloudflared termux-api openssh
+pkg install -y python termux-api || apt-get install -y python termux-api
 
 # 2. Install Python dependencies
-echo -e "\033[1;33m[2/4] Installing Python httpx library...\033[0m"
+echo -e "\033[1;33m[2/3] Installing Python httpx library...\033[0m"
 pip install httpx 2>/dev/null || pip install --break-system-packages httpx
 
-# 3. Make scripts executable
-echo -e "\033[1;33m[3/4] Setting execution permissions...\033[0m"
+# 3. Make scripts executable & create shortcut
 chmod +x "$SCRIPT_DIR/termux_start.sh"
-
-# 4. Create one-word global shortcut 'insom'
-echo -e "\033[1;33m[4/4] Creating quick shortcut command 'insom'...\033[0m"
+echo -e "\033[1;33m[3/3] Creating shortcut command 'insom'...\033[0m"
 if [ -d "$PREFIX/bin" ]; then
     ln -sf "$SCRIPT_DIR/termux_start.sh" "$PREFIX/bin/insom"
     chmod +x "$PREFIX/bin/insom"

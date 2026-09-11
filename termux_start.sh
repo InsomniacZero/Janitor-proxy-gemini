@@ -25,7 +25,7 @@ TUNNEL_LOG="$LOG_DIR/gemini_tunnel.log"
 # Cleanup on exit (Ctrl+C)
 cleanup() {
     echo ""
-    echo -e "\033[1;33m[!] Stopping Gemini Server and Tunnel...\033[0m"
+    echo -e "\033[1;33m[!] Stopping Gemini Server...\033[0m"
     if [ -n "$SERVER_PID" ]; then
         kill "$SERVER_PID" 2>/dev/null
     fi
@@ -53,11 +53,15 @@ fi
 
 echo -e "\033[1;36m[+] Starting local Gemini server on port ${PORT}...\033[0m"
 
+# Kill any previous instance lingering on the port
+pkill -f "python3 gemini_web2api.py --port ${PORT}" 2>/dev/null || true
+sleep 0.5
+
 # Start Python Gemini server
 python3 gemini_web2api.py --port ${PORT} > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
-sleep 2
+sleep 1
 
 # Verify local server is alive
 if ! kill -0 $SERVER_PID 2>/dev/null; then
@@ -66,89 +70,74 @@ if ! kill -0 $SERVER_PID 2>/dev/null; then
     exit 1
 fi
 
-echo -e "\033[1;36m[+] Starting secure HTTPS public tunnel for JanitorAI...\033[0m"
-
-# 3. Check for cloudflared
-if ! command -v cloudflared >/dev/null 2>&1; then
-    echo -e "\033[1;33m[!] cloudflared not found. Attempting to install via pkg...\033[0m"
-    pkg install -y cloudflared
-fi
-
-if ! command -v cloudflared >/dev/null 2>&1; then
-    echo -e "\033[1;31m[ERROR] cloudflared could not be installed.\033[0m"
-    echo -e "Please run: pkg install cloudflared"
-    exit 1
-fi
-
-# 4. Start HTTPS Tunnel
-rm -f "$TUNNEL_LOG"
-TUNNEL_URL=""
-
-echo -e "\033[1;36m[+] Connecting to Cloudflare Tunnel (HTTP/2 TCP)...\033[0m"
-cloudflared tunnel --url http://127.0.0.1:${PORT} --protocol http2 --edge-ip-version 4 > "$TUNNEL_LOG" 2>&1 &
-TUNNEL_PID=$!
-
-echo -ne "\033[1;33m[~] Generating proxy link\033[0m"
-for i in {1..12}; do
-    echo -ne "\033[1;33m.\033[0m"
-    if [ -f "$TUNNEL_LOG" ]; then
-        TUNNEL_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare\.com' "$TUNNEL_LOG" | head -n 1)
-        if [ -n "$TUNNEL_URL" ]; then
-            echo -e " \033[1;32m[Connected!]\033[0m"
-            break
-        fi
+# Check if user requested a public tunnel with --tunnel flag
+WANT_TUNNEL=false
+for arg in "$@"; do
+    if [ "$arg" == "--tunnel" ] || [ "$arg" == "-t" ]; then
+        WANT_TUNNEL=true
     fi
-    sleep 1
 done
-echo ""
 
-# 5. Fallback: If Cloudflare is blocked or slow on mobile, use Pinggy (Port 443 HTTPS)
-if [ -z "$TUNNEL_URL" ]; then
-    echo -e "\033[1;33m[!] Cloudflare was blocked by your mobile carrier. Switching to fallback tunnel (Pinggy)...\033[0m"
-    if [ -n "$TUNNEL_PID" ]; then
-        kill "$TUNNEL_PID" 2>/dev/null
-    fi
-    if ! command -v ssh >/dev/null 2>&1; then
-        pkg install -y openssh
-    fi
+if [ "$WANT_TUNNEL" = true ]; then
+    echo -e "\033[1;36m[+] Starting public HTTPS tunnel (--tunnel requested)...\033[0m"
     rm -f "$TUNNEL_LOG"
+    TUNNEL_URL=""
+    
+    # Try instant Pinggy SSL tunnel first (port 443 TCP, never blocked on mobile)
     ssh -p 443 -R 0:localhost:${PORT} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null a.pinggy.io > "$TUNNEL_LOG" 2>&1 &
     TUNNEL_PID=$!
     
-    echo -ne "\033[1;33m[~] Generating fallback link\033[0m"
-    for i in {1..12}; do
-        echo -ne "\033[1;33m.\033[0m"
+    for i in {1..8}; do
         if [ -f "$TUNNEL_LOG" ]; then
             TUNNEL_URL=$(grep -o -E 'https://[-0-9a-z.]+\.(pinggy-free\.link|pinggy\.link|free\.pinggy\.net)' "$TUNNEL_LOG" | head -n 1)
             if [ -n "$TUNNEL_URL" ]; then
-                echo -e " \033[1;32m[Connected!]\033[0m"
                 break
             fi
         fi
         sleep 1
     done
-    echo ""
+    
+    # If Pinggy timed out, try Cloudflare
+    if [ -z "$TUNNEL_URL" ]; then
+        kill "$TUNNEL_PID" 2>/dev/null
+        cloudflared tunnel --url http://127.0.0.1:${PORT} --protocol http2 --edge-ip-version 4 > "$TUNNEL_LOG" 2>&1 &
+        TUNNEL_PID=$!
+        for i in {1..8}; do
+            if [ -f "$TUNNEL_LOG" ]; then
+                TUNNEL_URL=$(grep -o 'https://[-0-9a-z]*\.trycloudflare\.com' "$TUNNEL_LOG" | head -n 1)
+                if [ -n "$TUNNEL_URL" ]; then
+                    break
+                fi
+            fi
+            sleep 1
+        done
+    fi
+    
+    if [ -n "$TUNNEL_URL" ]; then
+        PROXY_URL="${TUNNEL_URL}/v1"
+        MODE_INFO="Mode: Public HTTPS Tunnel"
+    else
+        echo -e "\033[1;33m[!] Tunnel timed out. Falling back to direct Localhost URL...\033[0m"
+        PROXY_URL="http://127.0.0.1:${PORT}/v1"
+        MODE_INFO="Mode: Direct Localhost (No internet lag)"
+    fi
+else
+    # PURE LOCALHOST - Zero delay, starts in 0.5s!
+    PROXY_URL="http://127.0.0.1:${PORT}/v1"
+    MODE_INFO="Mode: Direct Localhost (100% Local, zero lag)"
 fi
-
-if [ -z "$TUNNEL_URL" ]; then
-    echo -e "\033[1;31m[ERROR] Tunnel timed out. Check log below:\033[0m"
-    cat "$TUNNEL_LOG"
-    exit 1
-fi
-
-PROXY_URL="${TUNNEL_URL}/v1"
 
 # Copy to clipboard on Termux if termux-api is installed
 if command -v termux-clipboard-set >/dev/null 2>&1; then
     echo -n "$PROXY_URL" | termux-clipboard-set
     COPIED_NOTICE="✓ Auto-copied to your phone clipboard!"
 else
-    COPIED_NOTICE="(Select and copy the URL below)"
+    COPIED_NOTICE="(Copy the Proxy URL below into Janitor)"
 fi
 
 clear
 
-# 5. Display Clean Roleplay Banner
+# Display Clean Roleplay Banner
 cat << "EOF"
   ____                _       _   __        __   _     ____    _    ____ ___ 
  / ___| ___ _ __ ___ (_)_ __ (_)  \ \      / /__| |__ |___ \  / \  |  _ \_ _|
@@ -168,10 +157,11 @@ echo -e "\033[1;32m║\033[0m     • \033[1;33mAPI Key:\033[0m    \033[1;37msk-
 echo -e "\033[1;32m║\033[0m     • \033[1;33mModel:\033[0m      \033[1;37mgemini-3.8-flash\033[0m  (or gemini-3.8-flash-thinking)  \033[1;32m║\033[0m"
 echo -e "\033[1;32m╠═══════════════════════════════════════════════════════════════════╣\033[0m"
 echo -e "\033[1;32m║\033[0m  \033[1;35m${COPIED_NOTICE}\033[0m"
-echo -e "\033[1;32m║\033[0m  \033[1;30mPress [Ctrl + C] to stop. Start anytime with command: \033[1;33minsom\033[0m    \033[1;32m║\033[0m"
+echo -e "\033[1;32m║\033[0m  \033[1;34m${MODE_INFO}\033[0m"
+echo -e "\033[1;32m║\033[0m  \033[1;30mPress [Ctrl + C] to stop. Start anytime with: \033[1;33minsom\033[0m                 \033[1;32m║\033[0m"
 echo -e "\033[1;32m╚═══════════════════════════════════════════════════════════════════╝\033[0m"
 echo ""
-echo -e "\033[1;34m[Live Logs - Requests will appear here as Janitor chats]:\033[0m"
+echo -e "\033[1;34m[Live Logs - Chat requests will appear here]:\033[0m"
 
 # Follow server log in foreground
 tail -f "$LOG_FILE"

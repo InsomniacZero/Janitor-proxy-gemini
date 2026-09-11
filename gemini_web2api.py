@@ -678,6 +678,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -706,14 +707,15 @@ class GeminiHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
         self.end_headers()
 
     def do_GET(self):
         try:
-            if self.path.startswith("/v1") and not self._authorized():
+            if (self.path.startswith("/v1") or self.path.startswith("/chat") or self.path == "/models") and not self._authorized():
                 self.send_json({"error": {"message": "invalid api key"}}, 401)
                 return
-            if self.path == "/v1/models":
+            if self.path in ("/v1/models", "/models"):
                 self.send_json({"object": "list", "data": [
                     {"id": n, "object": "model", "created": 1700000000,
                      "owned_by": "google", "description": c["desc"]}
@@ -734,11 +736,11 @@ class GeminiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            if self.path.startswith("/v1") and not self._authorized():
+            if (self.path.startswith("/v1") or self.path.startswith("/chat")) and not self._authorized():
                 self.send_json({"error": {"message": "invalid api key"}}, 401)
                 return
             body = self._read_request_body()
-            if self.path == "/v1/chat/completions":
+            if self.path in ("/v1/chat/completions", "/chat/completions"):
                 self.handle_chat(body)
             elif self.path == "/v1/responses":
                 self.handle_responses(body)
@@ -836,6 +838,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Cache-Control", "no-cache")
                 self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Private-Network", "true")
                 self.end_headers()
                 first_chunk = {"id": cid, "object": "chat.completion.chunk", "created": int(time.time()),
                                "model": model_name, "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]}

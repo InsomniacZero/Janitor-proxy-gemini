@@ -45,12 +45,12 @@ Whenever you want to roleplay:
    ```
    and press **Enter**.
 3. You will see a banner with your proxy URL. The link is **already copied to your clipboard**!
-4. Go to **JanitorAI** in your browser:
+4. Go to **JanitorAI** in your phone's browser:
    - **API Type:** `OpenAI` / `Proxy`
-   - **Proxy URL:** `https://your-tunnel.trycloudflare.com/v1` *(paste from clipboard)*
+   - **Proxy URL:** `http://127.0.0.1:8081/v1` *(or paste from clipboard)*
    - **API Key:** `sk-gemini` *(or any text)*
    - **Model:** `gemini-3.8-flash` or `gemini-3.8-flash-thinking`
-5. Save settings and start chatting!
+5. Save settings and start chatting! *(Runs 100% locally on your phone with zero delay!)*
 
 ---
 
