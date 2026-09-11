@@ -43,7 +43,7 @@ fi
 
 if ! python3 -c "import httpx" >/dev/null 2>&1; then
     echo -e "\033[1;33m[!] httpx not found. Installing via pip...\033[0m"
-    pip install httpx
+    pip install httpx 2>/dev/null || pip install --break-system-packages httpx
 fi
 
 echo -e "\033[1;36m[+] Starting local Gemini server on port ${PORT}...\033[0m"

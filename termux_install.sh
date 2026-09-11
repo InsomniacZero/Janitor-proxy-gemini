@@ -18,8 +18,7 @@ pkg install -y python cloudflared termux-api || apt-get install -y python cloudf
 
 # 2. Install Python dependencies
 echo -e "\033[1;33m[2/4] Installing Python httpx library...\033[0m"
-pip install --upgrade pip
-pip install httpx
+pip install httpx 2>/dev/null || pip install --break-system-packages httpx
 
 # 3. Make scripts executable
 echo -e "\033[1;33m[3/4] Setting execution permissions...\033[0m"
