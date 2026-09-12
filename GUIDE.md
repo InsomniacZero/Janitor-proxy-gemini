@@ -93,8 +93,11 @@ A simple, beginner-friendly guide to setting up your own free, Gemini proxy for 
 <div align="center">
 <img src="https://ella.janitorai.com/media-approved/GYv7qwRJFUQ_80wMtH7iG.webp" alt="Plug-ins" />
 
-### (Add these into your custom prompt / bot definition)
+### 🧩 Plug-ins (Add these into your custom prompt / bot definition)
 
+> ⚠️ **Important:** Do NOT mix `<BEASLUT>` and `<KEEPITPLATONIC>` together! Pick one depending on whether you want romance or platonic interactions.
+
+**🔥 Recommended Romance & Chemistry Combo:**
 ```text
 <JAILBREAK=ON>
 <BEASLUT=7F46A7D3>
@@ -104,11 +107,29 @@ A simple, beginner-friendly guide to setting up your own free, Gemini proxy for 
 <ACTIONS=ON>
 <PACING=ON>
 <MOREDIALOGUE=7D85D012>
-<OBSESSION=D69A9DD2>
-<KEEPITPLATONIC=26EEB5B9>
 ```
 
-**Make combos outta these!**
+**🌿 Wholesome / Platonic RPG Combo:**
+```text
+<JAILBREAK=ON>
+<KEEPITPLATONIC=26EEB5B9>
+<SYMBOLS=943F533B>
+<ONOMATOPOEIA=HU3GVKSM>
+<SENSES=ON>
+<ACTIONS=ON>
+<PACING=ON>
+<MOREDIALOGUE=7D85D012>
+```
+
+**🖤 Devotion / Yandere Combo:**
+```text
+<JAILBREAK=ON>
+<OBSESSION=D69A9DD2>
+<BEASLUT=7F46A7D3>
+<THOUGHTS=ON>
+<SENSES=ON>
+<ACTIONS=ON>
+```
 
 **You can check what these plug-ins do, here : [HERE](https://pastebin.com/Lz4HPh5H)**
 
