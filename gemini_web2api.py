@@ -97,7 +97,15 @@ MODELS = {
     },
     "gemini-3.1-pro": {
         "mode": 3, "think": 4,
-        "desc": "Pro model (requires cookie for real routing)",
+        "desc": "Gemini 3.1 Pro standard",
+    },
+    "gemini-3.1-pro-extended": {
+        "mode": 3, "think": 0,
+        "desc": "Gemini 3.1 Pro with extended thinking mode",
+    },
+    "gemini-3.1-pro-thinking": {
+        "mode": 3, "think": 0,
+        "desc": "Gemini 3.1 Pro with deep thinking mode (~20k chars)",
     },
     "gemini-3.1-pro-enhanced": {
         "mode": 3, "think": 4, "extra": {31: 2, 80: 3},
@@ -998,12 +1006,26 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 think_override = int(think_str)
             except ValueError:
                 pass
-        cfg = MODELS.get(model_name)
+
+        norm = model_name.strip().lower().replace(" ", "-")
+        cfg = MODELS.get(model_name) or MODELS.get(norm)
         if not cfg:
-            default_name = CONFIG.get("default_model", "gemini-3.8-flash")
-            log(f"Unknown model '{model_name}', falling back to default: {default_name}")
-            model_name = default_name
-            cfg = MODELS.get(model_name, MODELS["gemini-3.8-flash"])
+            if ("gemini-" + norm) in MODELS:
+                model_name = "gemini-" + norm
+                cfg = MODELS[model_name]
+            elif norm in ("3.1-pro", "pro"):
+                model_name = "gemini-3.1-pro"
+                cfg = MODELS[model_name]
+            elif norm in ("3.1-pro-extended", "3.1-pro-thinking", "pro-extended", "pro-thinking"):
+                model_name = "gemini-3.1-pro-extended"
+                cfg = MODELS[model_name]
+            else:
+                default_name = CONFIG.get("default_model", "gemini-3.8-flash")
+                log(f"Unknown model '{model_name}', falling back to default: {default_name}")
+                model_name = default_name
+                cfg = MODELS.get(model_name, MODELS["gemini-3.8-flash"])
+        else:
+            model_name = norm if norm in MODELS else model_name
         return model_name, cfg["mode"], (think_override if think_override is not None else cfg["think"]), None
 
     def _call_gemini(self, prompt, model_id, think_mode, tools, file_refs=None):
