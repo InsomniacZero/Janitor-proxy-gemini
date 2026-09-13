@@ -62,6 +62,7 @@ DEFAULT_CONFIG = {
     "proxy": None,
     "api_keys": [],
     "temporary_chats": False,
+    "max_hist_chars": None,
 }
 
 CONFIG = dict(DEFAULT_CONFIG)
@@ -829,7 +830,7 @@ def process_lorebary_and_jailbreak(messages: list) -> tuple:
     return processed_messages, active_directives, is_rp
 
 
-def messages_to_prompt(messages: list, tools: list = None) -> tuple:
+def messages_to_prompt(messages: list, tools: list = None, model_name: str = "") -> tuple:
     """Convert OpenAI messages to (prompt_str, images_list) with smart windowing, recency anchoring, and turn preservation."""
     processed_messages, active_directives, is_rp = process_lorebary_and_jailbreak(messages)
     system_parts = []
@@ -939,8 +940,14 @@ def messages_to_prompt(messages: list, tools: list = None) -> tuple:
         prefill = merged_turns.pop()["content"]
 
     # Smart sliding context window for long roleplay (prevents attention degradation & reset)
-    # Target 45,000 chars of dialogue history so Gemini Web stays 100% focused on recent turns
-    MAX_HIST_CHARS = 45000
+    # Pro models easily handle 120,000+ chars (~30,000 tokens) with high precision
+    custom_budget = CONFIG.get("max_hist_chars")
+    if custom_budget:
+        MAX_HIST_CHARS = int(custom_budget)
+    elif "pro" in (model_name or "").lower():
+        MAX_HIST_CHARS = 120000  # 120k chars (~30k tokens) for Pro models
+    else:
+        MAX_HIST_CHARS = 60000   # 60k chars (~15k tokens) for Flash models
     total_hist_len = sum(len(t["content"]) for t in merged_turns)
     if total_hist_len > MAX_HIST_CHARS and len(merged_turns) > 2:
         last_turn = merged_turns[-1]
@@ -1205,7 +1212,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             return
 
         tools = req.get("tools")
-        prompt, images = messages_to_prompt(req.get("messages", []), tools)
+        prompt, images = messages_to_prompt(req.get("messages", []), tools, model_name=model_name)
         if not prompt.strip():
             self.send_json({"error": {"message": "empty prompt"}}, 400)
             return
@@ -1331,7 +1338,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             tools = [{"type": "function", "function": {"name": t["name"], "description": t.get("description", ""), "parameters": t.get("parameters", {})}}
                      if t.get("type") == "function" and "function" not in t else t for t in tools]
 
-        prompt, images = messages_to_prompt(messages, tools)
+        prompt, images = messages_to_prompt(messages, tools, model_name=model_name)
         if not prompt.strip():
             self.send_json({"error": {"message": "empty input"}}, 400)
             return
@@ -1486,6 +1493,7 @@ def main():
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--cookie-file", type=str, default=None, help="Path to cookie file")
     parser.add_argument("--proxy", type=str, default=None, help="HTTP proxy, e.g. http://127.0.0.1:7890")
+    parser.add_argument("--max-context", type=int, default=None, help="Max dialogue history characters (e.g. 120000)")
     parser.add_argument("--version", action="version", version=f"gemini-web2api {__version__}")
     args = parser.parse_args()
 
@@ -1503,6 +1511,8 @@ def main():
         CONFIG["cookie_file"] = args.cookie_file
     if args.proxy:
         CONFIG["proxy"] = args.proxy
+    if getattr(args, "max_context", None):
+        CONFIG["max_hist_chars"] = args.max_context
 
     class ThreadedServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True
