@@ -426,11 +426,13 @@ def gemini_stream_generate_iter(prompt: str, model_id: int, think_mode: int, fil
                                 for part in inner2[4]:
                                     if isinstance(part, list) and len(part) > 1 and part[1] and isinstance(part[1], list):
                                         for t in part[1]:
-                                            if isinstance(t, str) and len(t) > len(prev_text):
-                                                delta = t[len(prev_text):]
-                                                delta = clean_gemini_text(delta, strip=False)
-                                                if delta:
-                                                    yield delta
+                                            if isinstance(t, str):
+                                                clean_full = clean_gemini_text(t, strip=False)
+                                                clean_prev = clean_gemini_text(prev_text, strip=False)
+                                                if len(clean_full) > len(clean_prev):
+                                                    delta = clean_full[len(clean_prev):]
+                                                    if delta:
+                                                        yield delta
                                                 prev_text = t
                         except (json.JSONDecodeError, IndexError, TypeError):
                             pass
@@ -447,17 +449,37 @@ def gemini_stream_generate_iter(prompt: str, model_id: int, think_mode: int, fil
 
 
 def clean_gemini_text(text: str, strip: bool = True) -> str:
-    """Remove internal code execution artifacts, suggestion chips, and evasive disclaimers."""
+    """Remove internal code execution artifacts, suggestion chips, FollowUp tags, and evasive disclaimers."""
+    # 1. Code execution artifacts
     text = re.sub(
         r'```(?:python|javascript|text)\?code_(?:reference|stdout)&code_event_index=\d+\n.*?```\n?',
         '', text, flags=re.DOTALL
     )
+    # 2. Suggestion chips & internal action tags: Elicit, Suggest, FollowUp, ActionCard, RelatedQueries
     text = re.sub(
-        r'</?(?:Elic[ia]t|Suggest)[A-Za-z0-9_]*[^>]*>.*?(?:</(?:Elic[ia]t|Suggest)[A-Za-z0-9_]*>|$)|</?(?:Elic[ia]t|Suggest)[A-Za-z0-9_]*[^>]*/?>',
+        r'</?(?:Elic[ia]t|Suggest|FollowUp|ActionCard|RelatedQueries)[A-Za-z0-9_]*[^>]*>.*?(?:</(?:Elic[ia]t|Suggest|FollowUp|ActionCard|RelatedQueries)[A-Za-z0-9_]*>|$)|</?(?:Elic[ia]t|Suggest|FollowUp|ActionCard|RelatedQueries)[A-Za-z0-9_]*[^>]*/?>',
         '', text, flags=re.DOTALL | re.IGNORECASE
     )
-    text = re.sub(r'</?(?:[A-Za-z0-9_]*(?:Elic|Sugg)[A-Za-z0-9_]*)[^>]*$', '', text, flags=re.IGNORECASE)
+    # 3. Generic paired or self-closing tags with label= or query= (e.g. <FollowUp label="..." query="..."/>)
+    text = re.sub(
+        r'<[A-Za-z0-9_-]+[^>]*\b(?:label|query)=[\'"][^\'"]*[\'"][^>]*>.*?</[A-Za-z0-9_-]+>',
+        '', text, flags=re.DOTALL | re.IGNORECASE
+    )
+    text = re.sub(
+        r'<[A-Za-z0-9_-]+[^>]*\b(?:label|query)=[\'"][^\'"]*[\'"][^>]*/?>',
+        '', text, flags=re.IGNORECASE
+    )
+    # 4. Incomplete / trailing unclosed tags at the very end of stream
+    text = re.sub(
+        r'</?(?:[A-Za-z0-9_]*(?:Elic|Sugg|Follow|Action)[A-Za-z0-9_]*)[^>]*$',
+        '', text, flags=re.IGNORECASE
+    )
+    text = re.sub(r'<[A-Za-z0-9_]+[^>]*$', '', text)
+
+    # 5. Role markers
     text = re.sub(r'^(?:\[(?:Assistant|Model)\]:?|(?:Assistant|Model):)\s*', '', text, flags=re.IGNORECASE)
+
+    # 6. Refusal preambles and postambles
     text = re.sub(r'^(?:I cannot (?:fulfill|generate|participate)[^\n]+\n+)+(?:\*{3,}\n+)?', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\n*(?:I(?:\'m| am) (?:just )?a language model[^\n]*|As an AI[^\n]*)$', '', text, flags=re.IGNORECASE)
     return text.strip() if strip else text
@@ -640,16 +662,24 @@ def process_lorebary_and_jailbreak(messages: list) -> tuple:
 
 
 def messages_to_prompt(messages: list, tools: list = None) -> tuple:
-    """Convert OpenAI messages to (prompt_str, images_list) with smart windowing and turn preservation."""
+    """Convert OpenAI messages to (prompt_str, images_list) with smart windowing, recency anchoring, and turn preservation."""
     processed_messages, active_directives, is_rp = process_lorebary_and_jailbreak(messages)
     system_parts = []
     images = []
 
-    if is_rp or active_directives:
-        system_parts.append(GEMINI_RP_JAILBREAK)
-        if active_directives:
-            directives_str = "\n".join(f"- {d}" for d in active_directives)
-            system_parts.append(f"[Writing Style & Guidelines]:\n{directives_str}")
+    # 1. Master Creative Roleplay Framework - always active for roleplay requests
+    system_parts.append(
+        "[Master Directives & Creative Writing Framework]:\n"
+        "This is an ongoing collaborative literary story.\n"
+        "- Absolute User Agency: NEVER speak, act, choose, or narrate thoughts for the user. Exclusively control your character and the immediate world response. Always leave narrative space for the user to respond.\n"
+        "- Literary Depth: Write immersive, multi-paragraph descriptive prose. Emphasize sensory atmosphere, authentic dialogue, body language, and pacing. Never summarize or rush scenes.\n"
+        "- Pure Narrative Immersion: Never break character, give out-of-character meta comments, or output follow-up suggestion chips."
+    )
+
+    # 2. Enhanced Style Directives from plugins (if any)
+    if active_directives:
+        directives_str = "\n".join(f"- {d}" for d in active_directives)
+        system_parts.append(f"[Writing Style Directives]:\n{directives_str}")
 
     if tools:
         tool_defs = []
@@ -694,9 +724,13 @@ def messages_to_prompt(messages: list, tools: list = None) -> tuple:
         else:
             content = str(content) if content is not None else ""
 
+        # Scrub any legacy <FollowUp...> tags or suggestion chips from history
+        if role in ("assistant", "user"):
+            content = clean_gemini_text(content, strip=False)
+
         if role == "system":
             if content.strip():
-                system_parts.append(f"[Character Lore & Context]: {content.strip()}")
+                system_parts.append(f"[Author's Custom Directives & Scenario Context]:\n{content.strip()}")
         elif role == "tool":
             turns.append({
                 "role": "user",
@@ -760,6 +794,11 @@ def messages_to_prompt(messages: list, tools: list = None) -> tuple:
     for t in merged_turns:
         prefix = "[Assistant]: " if t["role"] == "assistant" else "[User]: "
         dialogue_parts.append(f"{prefix}{t['content']}")
+
+    # Recency Anchor: Ensures high-priority adherence to length & anti-user-impersonation
+    # even at message 150+ where distant instructions degrade.
+    recency_anchor = "[System Note: Write a rich, multi-paragraph continuation from your character's perspective. Do NOT speak, act, or narrate for the user.]"
+    dialogue_parts.append(recency_anchor)
 
     all_parts = [p for p in system_parts if p.strip()] + dialogue_parts
     prompt = "\n\n".join(all_parts)
