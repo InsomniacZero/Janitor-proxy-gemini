@@ -30,7 +30,8 @@ echo  2. Go to: API Settings - Proxy
 echo  3. Set:
 echo     - Proxy URL:  http://127.0.0.1:8081/v1
 echo     - API Key:    sk-gemini
-echo     - Model:      gemini-3.8-flash (or gemini-3.8-flash-thinking)
+echo     - Model:      gemini-3.8-flash-thinking (Default)
+echo                   (or gemini-3.8-flash / gemini-3.1-pro)
 echo ===================================================================
 echo  Running 100%% locally on your PC (Zero lag / No Cloudflare needed)
 echo  Press Ctrl+C in this window to stop the server.

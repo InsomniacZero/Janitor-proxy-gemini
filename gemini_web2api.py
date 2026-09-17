@@ -56,7 +56,7 @@ DEFAULT_CONFIG = {
     "gemini_bl": "boq_assistant-bard-web-server_20260907.07_p3",
     "auth_user": None,
     "xsrf_token": None,
-    "default_model": "gemini-3.8-flash",
+    "default_model": "gemini-3.8-flash-thinking",
     "log_requests": True,
     "cookie_file": None,
     "proxy": None,
@@ -79,6 +79,10 @@ MODELS = {
     "gemini-3.8-flash-thinking": {
         "mode": 2, "think": 0,
         "desc": "Gemini 3.8 Flash with deep thinking mode (~20k chars)",
+    },
+    "gemini-3.8-thinking": {
+        "mode": 2, "think": 0,
+        "desc": "Alias for gemini-3.8-flash-thinking",
     },
     "gemini-3.7-flash": {
         "mode": 1, "think": 4,
@@ -1517,7 +1521,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             elif self.path in ("/", "/health"):
                 self.send_json({"status": "ok", "version": __version__,
                                 "models": list(MODELS.keys()),
-                                "default_model": CONFIG.get("default_model", "gemini-3.8-flash")})
+                                "default_model": CONFIG.get("default_model", "gemini-3.8-flash-thinking")})
             else:
                 self.send_json({"error": "not found"}, 404)
         except (BrokenPipeError, ConnectionResetError):
@@ -1586,6 +1590,13 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 pass
 
         norm = model_name.strip().lower().replace(" ", "-")
+        if norm in ("gemini-3.8-thinking", "3.8-thinking", "3.8-flash-thinking", "thinking", "gemini-thinking", "flash-thinking"):
+            model_name = "gemini-3.8-flash-thinking"
+            norm = "gemini-3.8-flash-thinking"
+        elif norm in ("3.8", "3.8-flash", "flash"):
+            model_name = "gemini-3.8-flash"
+            norm = "gemini-3.8-flash"
+
         cfg = MODELS.get(model_name) or MODELS.get(norm)
         if not cfg:
             if ("gemini-" + norm) in MODELS:
@@ -1598,10 +1609,10 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 model_name = "gemini-3.1-pro-extended"
                 cfg = MODELS[model_name]
             else:
-                default_name = CONFIG.get("default_model", "gemini-3.8-flash")
+                default_name = CONFIG.get("default_model", "gemini-3.8-flash-thinking")
                 log(f"Unknown model '{model_name}', falling back to default: {default_name}")
                 model_name = default_name
-                cfg = MODELS.get(model_name, MODELS["gemini-3.8-flash"])
+                cfg = MODELS.get(model_name, MODELS["gemini-3.8-flash-thinking"])
         else:
             model_name = norm if norm in MODELS else model_name
         return model_name, cfg["mode"], (think_override if think_override is not None else cfg["think"]), None
@@ -1629,8 +1640,9 @@ class GeminiHandler(BaseHTTPRequestHandler):
 
     def handle_chat(self, body: bytes):
         req = json.loads(body)
+        raw_model = req.get("model", "")
         model_name, model_id, think_mode, err = self._resolve_model(
-            req.get("model", CONFIG["default_model"]))
+            raw_model or CONFIG.get("default_model", "gemini-3.8-flash-thinking"))
         if err:
             self.send_json({"error": {"message": err}}, 400)
             return
@@ -1638,6 +1650,16 @@ class GeminiHandler(BaseHTTPRequestHandler):
         raw_messages = req.get("messages", [])
         user_name, _ = extract_participant_names(raw_messages)
         tools = req.get("tools")
+        stream = req.get("stream", False)
+
+        # Clear, informative model log for Janitor AI users
+        think_tag = "Thinking [ON]" if think_mode == 0 else "Thinking [OFF]"
+        stream_tag = "streaming" if stream else "sync"
+        if raw_model and raw_model.strip().lower() != model_name:
+            log(f"⚡ [Janitor AI] Request using model: '{raw_model}' -> resolved to: '{model_name}' ({think_tag}, {stream_tag})")
+        else:
+            log(f"⚡ [Janitor AI] Request using model: '{model_name}' ({think_tag}, {stream_tag})")
+
         prompt, images = messages_to_prompt(raw_messages, tools, model_name=model_name)
         if not prompt.strip():
             self.send_json({"error": {"message": "empty prompt"}}, 400)
@@ -1646,7 +1668,6 @@ class GeminiHandler(BaseHTTPRequestHandler):
         all_text_chunks = [m.get("content", "") for m in raw_messages if isinstance(m, dict) and isinstance(m.get("content"), str)]
         allow_narration = allows_user_narration(*all_text_chunks)
 
-        stream = req.get("stream", False)
         cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         try:
             file_refs = upload_images(images)
@@ -1677,6 +1698,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
                 self.wfile.write(b"data: [DONE]\n\n")
                 self.wfile.flush()
+                log(f"✓ [Janitor AI] Finished response stream for '{model_name}'")
             except (BrokenPipeError, ConnectionResetError):
                 pass
             except Exception as e:
@@ -1707,7 +1729,9 @@ class GeminiHandler(BaseHTTPRequestHandler):
             self.wfile.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode())
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
+            log(f"✓ [Janitor AI] Finished response stream for '{model_name}'")
         else:
+            log(f"✓ [Janitor AI] Finished generating response for '{model_name}'")
             self.send_json({
                 "id": cid, "object": "chat.completion", "created": int(time.time()),
                 "model": model_name,
@@ -1719,11 +1743,15 @@ class GeminiHandler(BaseHTTPRequestHandler):
     def handle_responses(self, body: bytes):
         """OpenAI Responses API for Codex CLI compatibility."""
         req = json.loads(body)
+        raw_model = req.get("model", "")
         model_name, model_id, think_mode, err = self._resolve_model(
-            req.get("model", CONFIG["default_model"]))
+            raw_model or CONFIG.get("default_model", "gemini-3.8-flash-thinking"))
         if err:
             self.send_json({"error": {"message": err}}, 400)
             return
+
+        think_tag = "Thinking [ON]" if think_mode == 0 else "Thinking [OFF]"
+        log(f"⚡ [Janitor AI /responses] Request using model: '{model_name}' ({think_tag})")
 
         input_items = req.get("input", [])
         tools = req.get("tools")
@@ -1870,6 +1898,9 @@ class GeminiHandler(BaseHTTPRequestHandler):
         if err:
             self.send_json({"error": {"message": err}}, 400)
             return
+
+        think_tag = "Thinking [ON]" if think_mode == 0 else "Thinking [OFF]"
+        log(f"⚡ [Google API] Request using model: '{model_name}' ({think_tag}, stream={stream})")
 
         prompt, images = google_contents_to_prompt(req)
         if not prompt.strip():
